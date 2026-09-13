@@ -1,0 +1,66 @@
+:root {
+  --bg:      #0F0F0F;
+  --surface: #181818;
+  --raised:  #212121;
+  --border:  #303030;
+  --text:    #F1F1F1;
+  --text-2:  #CFCFCF;
+  --muted:   #AAAAAA;
+  --faint:   #717171;
+  --accent:  #FF0000;
+}
+
+/* Sem `background` na raiz: o fundo da janela já é do `theme.json` (ver
+   AGENTS.md — pintar por cima é uma camada redobrada em cada pixel). */
+.tela      { width: fill; height: fill; spacing: 0; }
+
+.cabecalho     { width: fill; align_y: center; spacing: 14; padding: 12 20;
+                 border_width: 1; border_color: var(--border); }
+.logo          { size: 18; bold: true; color: var(--text); }
+.btn_voltar    { color: var(--surface); text_color: var(--text); padding: 8 12; border_radius: 18; }
+.btn_voltar:hover { color: var(--raised); }
+.campo_busca   { width: 360; }
+.btn_buscar    { color: var(--surface); text_color: var(--text); padding: 8 16; border_radius: 18; }
+.btn_buscar:hover { color: var(--raised); }
+.btn_config    { color: var(--surface); text_color: var(--text); padding: 8 12; border_radius: 18; size: 15; }
+.btn_config:hover { color: var(--raised); }
+
+.conteudo      { width: fill; padding: 20; spacing: 20; }
+.secao         { width: fill; spacing: 16; }
+.titulo_secao  { size: 16; bold: true; color: var(--text); }
+.erro          { size: 13; color: var(--danger); }
+.vazio         { size: 13; color: var(--faint); }
+.carregando    { size: 13; color: var(--muted); }
+
+.cartao_wrap     { cursor: pointer; }
+.cartao          { width: 320; spacing: 8; }
+.miniatura       { border_radius: 8; }
+.miniatura_vazia { background: var(--surface); border_radius: 8; }
+.cartao_titulo   { size: 14; bold: true; color: var(--text); max_width: 320; }
+.cartao_canal    { size: 12; color: var(--muted); }
+.cartao_meta     { size: 12; color: var(--faint); }
+
+.btn_mais        { color: var(--surface); text_color: var(--text); padding: 9 16; border_radius: 18; }
+.btn_mais:hover  { color: var(--raised); }
+.btn_primario        { color: var(--accent); text_color: #FFFFFF; bold: true; padding: 10 18; border_radius: 6; }
+.btn_primario:hover  { color: #D90000; }
+
+.miniatura_grande  { border_radius: 10; }
+.video_titulo      { size: 20; bold: true; color: var(--text); }
+.video_canal_link  { size: 14; bold: true; color: var(--text-2); cursor: pointer; }
+.video_meta        { size: 12; color: var(--faint); }
+.video_descricao   { size: 13; color: var(--text-2); max_width: 800; }
+
+.comentario         { width: fill; }
+.comentario_autor   { size: 13; bold: true; color: var(--text); }
+.comentario_texto   { size: 13; color: var(--text-2); max_width: 760; }
+.comentario_meta    { size: 11; color: var(--faint); }
+
+.cabecalho_canal   { width: fill; }
+.canal_titulo      { size: 22; bold: true; color: var(--text); }
+.canal_inscritos   { size: 12; color: var(--muted); }
+.canal_descricao   { size: 13; color: var(--text-2); max_width: 800; }
+
+.secao_config   { width: fill; spacing: 14; }
+.config_texto   { size: 13; color: var(--text-2); max_width: 640; }
+.campo_chave    { width: 480; }

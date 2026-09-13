@@ -1,0 +1,9 @@
+{
+    "name": "Youtube",
+    "background": "#0F0F0F",
+    "text": "#F1F1F1",
+    "primary": "#FF0000",
+    "success": "#3FB950",
+    "warning": "#D29922",
+    "danger": "#F85149"
+}

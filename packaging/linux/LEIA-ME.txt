@@ -1,0 +1,18 @@
+Youtube
+
+COMO RODAR
+
+  ./youtube
+
+  Mantenha a pasta 'views' ao lado do binário: os templates, os estilos e os
+  scripts são lidos enquanto o app roda — é o que permite editá-los sem
+  recompilar. Sem essa pasta a janela abre vazia.
+
+COMO INSTALAR (opcional)
+
+  ./instalar.sh
+
+  Instala em ~/.local (sem sudo) e cria a entrada no menu de aplicativos.
+  Com --sistema, instala em /usr/local para todos os usuários.
+
+  Para remover: ./instalar.sh --remover

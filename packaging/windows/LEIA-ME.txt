@@ -1,0 +1,17 @@
+Youtube
+
+COMO RODAR
+
+  Duplo-clique em youtube.exe. Não precisa instalar nada.
+
+  Mantenha a pasta 'views' ao lado do .exe: os templates, os estilos e os
+  scripts são lidos enquanto o app roda — é o que permite editá-los sem
+  recompilar. Sem essa pasta a janela abre vazia.
+
+COMO INSTALAR (opcional)
+
+  Duplo-clique em instalar.bat. Ele copia o programa para
+  %LOCALAPPDATA%\Programs\youtube e cria um atalho no menu Iniciar.
+  Não pede senha de administrador.
+
+  Para remover: desinstalar.bat.

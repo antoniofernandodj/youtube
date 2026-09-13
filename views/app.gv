@@ -1,0 +1,151 @@
+<screen title="YouTube" size="1180 760" min_size="820 560">
+  <resources>
+    <link rel="theme"      href="views/styles/theme.json" />
+    <link rel="stylesheet" href="views/styles/app.gss" />
+    <script src="scripts/app.luau"></script>
+
+    <!-- Componente local, só de exibição — sem <script>, sem ação própria.
+         Quem trata o clique é o <container> que o embrulha no uso (on_press
+         fora do componente), então nenhuma regra de prefixo de ação entra
+         em jogo aqui. -->
+    <component name="VideoCard">
+      <props>
+        <prop name="thumb" default="" />
+        <prop name="titulo" />
+        <prop name="canal" />
+        <prop name="meta" default="" />
+      </props>
+      <column class="cartao">
+        <image if="{thumb}" source="{thumb}" width="320" height="180" class="miniatura" />
+        <container else class="miniatura_vazia" width="320" height="180" />
+        <text class="cartao_titulo">{titulo}</text>
+        <text class="cartao_canal">{canal}</text>
+        <text if="{meta}" class="cartao_meta">{meta}</text>
+      </column>
+    </component>
+  </resources>
+
+  <column class="tela">
+    <row class="cabecalho">
+      <button if="{view}" not_equals="home" text="←" on_click="voltar" class="btn_voltar" />
+      <text class="logo">▶ YouTube</text>
+      <textinput value="busca" placeholder="Pesquisar" class="campo_busca" />
+      <button text="Buscar" on_click="pesquisar" class="btn_buscar" />
+      <space />
+      <button text="⚙" on_click="ir_config" class="btn_config" tooltip="Configurações" />
+    </row>
+
+    <scrollable height="fill">
+      <column class="conteudo">
+
+        <!-- ═══ Configuração da chave de API ═══ -->
+        <template if="{view}" equals="config">
+          <column class="secao_config">
+            <text class="titulo_secao">Configurar chave de API</text>
+            <text class="config_texto">Crie uma chave gratuita em console.cloud.google.com: novo projeto → ativar "YouTube Data API v3" → Credenciais → Criar credenciais → Chave de API. A chave fica só no seu computador.</text>
+            <textinput value="config_chave" placeholder="Cole sua chave de API aqui" class="campo_chave" />
+            <text if="{config_erro}" class="erro">{config_erro}</text>
+            <button text="Salvar" on_click="salvar_chave" class="btn_primario" />
+          </column>
+        </template>
+
+        <!-- ═══ Início (em alta) ═══ -->
+        <template if="{view}" equals="home">
+          <column class="secao">
+            <text class="titulo_secao">Em alta</text>
+            <text if="{home_erro}" class="erro">{home_erro}</text>
+            <text if="{home_itens}" empty class="vazio">Nada por aqui ainda.</text>
+            <grid columns="4" spacing="16" row_spacing="16">
+              <container for-each="home_itens" var="v" on_press="abrir_video:{v.id}" class="cartao_wrap">
+                <VideoCard thumb="{v.thumb}" titulo="{v.titulo}" canal="{v.canal}" meta="{v.meta}" />
+              </container>
+            </grid>
+            <button if="{home_tem_mais}" text="Carregar mais" on_click="carregar_mais_home" class="btn_mais" />
+            <text if="{home_carregando}" class="carregando">Carregando…</text>
+          </column>
+        </template>
+
+        <!-- ═══ Busca ═══ -->
+        <template if="{view}" equals="busca">
+          <column class="secao">
+            <text class="titulo_secao">Resultados para "{busca_termo}"</text>
+            <text if="{busca_erro}" class="erro">{busca_erro}</text>
+            <text if="{busca_itens}" empty class="vazio">Nada encontrado.</text>
+            <grid columns="4" spacing="16" row_spacing="16">
+              <container for-each="busca_itens" var="v" on_press="abrir_video:{v.id}" class="cartao_wrap">
+                <VideoCard thumb="{v.thumb}" titulo="{v.titulo}" canal="{v.canal}" meta="{v.meta}" />
+              </container>
+            </grid>
+            <button if="{busca_tem_mais}" text="Carregar mais" on_click="carregar_mais_busca" class="btn_mais" />
+            <text if="{busca_carregando}" class="carregando">Carregando…</text>
+          </column>
+        </template>
+
+        <!-- ═══ Vídeo ═══ -->
+        <template if="{view}" equals="video">
+          <template if="{video_carregando}">
+            <text class="carregando">Carregando…</text>
+          </template>
+          <template else-if="{video_erro}">
+            <text class="erro">{video_erro}</text>
+          </template>
+          <template else>
+            <column class="secao">
+              <image if="{video_thumb}" source="{video_thumb}" width="480" height="270" class="miniatura_grande" />
+              <text class="video_titulo">{video_titulo}</text>
+              <row spacing="14" align_y="center">
+                <text on_press="abrir_canal:{video_canal_id}" class="video_canal_link">{video_canal}</text>
+                <space />
+                <button text="▶ Assistir no YouTube" on_click="assistir" class="btn_primario" />
+              </row>
+              <text class="video_meta">{video_meta}</text>
+              <text class="video_descricao">{video_descricao}</text>
+              <rule />
+              <text class="titulo_secao">Comentários</text>
+              <row spacing="10" for-each="comentarios_itens" var="c" class="comentario">
+                <Avatar src="{c.avatar}" initials="?" size="36" />
+                <column spacing="4">
+                  <text class="comentario_autor">{c.autor}</text>
+                  <text class="comentario_texto">{c.texto}</text>
+                  <text class="comentario_meta">{c.curtidas} · {c.quando}</text>
+                </column>
+              </row>
+              <button if="{comentarios_tem_mais}" text="Carregar mais comentários" on_click="carregar_mais_comentarios" class="btn_mais" />
+              <text if="{comentarios_carregando}" class="carregando">Carregando comentários…</text>
+            </column>
+          </template>
+        </template>
+
+        <!-- ═══ Canal ═══ -->
+        <template if="{view}" equals="canal">
+          <template if="{canal_carregando}">
+            <text class="carregando">Carregando…</text>
+          </template>
+          <template else-if="{canal_erro}">
+            <text class="erro">{canal_erro}</text>
+          </template>
+          <template else>
+            <column class="secao">
+              <row spacing="16" align_y="center" class="cabecalho_canal">
+                <Avatar src="{canal_avatar}" initials="?" size="72" />
+                <column spacing="4">
+                  <text class="canal_titulo">{canal_titulo}</text>
+                  <text class="canal_inscritos">{canal_inscritos}</text>
+                </column>
+              </row>
+              <text if="{canal_descricao}" class="canal_descricao">{canal_descricao}</text>
+              <rule />
+              <grid columns="4" spacing="16" row_spacing="16">
+                <container for-each="canal_videos_itens" var="v" on_press="abrir_video:{v.id}" class="cartao_wrap">
+                  <VideoCard thumb="{v.thumb}" titulo="{v.titulo}" canal="{v.canal}" meta="{v.meta}" />
+                </container>
+              </grid>
+              <button if="{canal_tem_mais}" text="Carregar mais" on_click="carregar_mais_canal" class="btn_mais" />
+            </column>
+          </template>
+        </template>
+
+      </column>
+    </scrollable>
+  </column>
+</screen>
