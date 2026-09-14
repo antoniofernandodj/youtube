@@ -1,0 +1,414 @@
+INVESTIGAÇÃO EM ABERTO — dois bugs, causa raiz ainda não encontrada
+Máquina: Intel Core i5-3470 (Ivy Bridge, 2012), 4 cores, Intel HD Graphics 2500.
+KDE Plasma Wayland. glacier-ui 0.104.2 (path atual: registry).
+Escrito em 2026-09-13, sessão Claude Code (session_01WoyaCfebmi6KD8DYVqybmq).
+
+===========================================================================
+BUG 1 — Thumbnails/avatares aparecem PRETOS (ou em branco) na grade
+===========================================================================
+
+STATUS: RESOLVIDO. Causa raiz encontrada lendo o código-fonte do motor
+(não era GPU/Vulkan — aquilo era uma pista falsa, ver histórico abaixo).
+
+CAUSA RAIZ CONFIRMADA (lida direto no código, não é suposição):
+`if="{chave}"` sozinho (sem equals/not_equals/one_of/contains/empty/
+not_empty) NÃO significa "essa chave tem valor" — significa "essa chave é
+um FLAG booleano marcado". A implementação (duas cópias idênticas em
+espírito, uma em cada arquivo):
+
+  glacier-ui/src/eval.rs:930 (usada pela avaliação de if=/else-if= genérica)
+    fn is_truthy(s: &str) -> bool {
+        matches!(s.trim().to_ascii_lowercase().as_str(),
+            "true" | "1" | "yes" | "on" | "sim")
+    }
+
+  glacier-ui/src/widget.rs:447 (usada por widgets tipo checkbox/toggle)
+    pub(crate) fn is_truthy(s: &str) -> bool {
+        let s = s.trim();
+        igual_ci(s, "true") || igual_ci(s, "yes") || igual_ci(s, "on")
+            || igual_ci(s, "sim") || s == "1"
+    }
+
+É uma ALLOWLIST, não um "vazio/false/0 = falso, resto = true". Uma URL ou
+caminho de arquivo (ex.: "/home/.../l37veKnjePU.jpg") NUNCA bate com
+nenhum desses cinco valores — logo `if="{thumb}"` é SEMPRE falso quando
+`thumb` é uma miniatura de verdade, e o `<container else class=
+"miniatura_vazia">` (placeholder escuro) é o que sempre aparece no lugar.
+Isso é 100% determinístico, não depende de GPU, driver, for-each,
+componente, scrollable ou nada disso — por isso nenhuma das teorias de
+composição/GPU explicava o comportamento visto.
+
+Por que a interpolação de texto `{thumb}` mostrava o valor certo ao lado
+do placeholder preto: interpolação de texto não passa por is_truthy() —
+ela só substitui a chave pelo valor cru. Só quem usa is_truthy() é o
+avaliador de if=/else-if= (eval.rs) e os widgets de estado marcado tipo
+checkbox (widget.rs) — dois caminhos de código totalmente diferentes do
+de interpolação, o que é exatamente por que os dois pareciam
+"discordar" sobre se {thumb} era truthy.
+
+`not_empty`/`empty` TAMBÉM não servem pra isso — são especificamente para
+listas JSON (`json_array_is_empty`, eval.rs:999 faz
+`serde_json::from_str::<Value>(value)` e só considera "não vazio" um
+Array JSON de fato; uma string simples tipo uma URL SEMPRE conta como
+"vazio" ali, porque não faz parse como array).
+
+CONCLUSÃO: não é bug do motor — é comportamento deliberado (documentado
+no próprio comentário do código: "Whether a context string should count
+as 'checked'/true", pensado pra checkbox/toggle, não pra "essa string
+tem conteúdo?"). O idioma certo pra "renderiza se a chave tiver um
+valor não-vazio" é comparação explícita contra string vazia:
+`if="{chave}" not_equals=""` — isso usa o branch `not_equals` de
+eval_condition (eval.rs:954), que faz comparação de string pura via
+process_tpl, sem passar por is_truthy nem por parse de JSON.
+
+FIX APLICADO em views/app.gv (dois lugares):
+  - VideoCard: `<image if="{thumb}" not_equals="" source="{thumb}" .../>`
+  - Tela de vídeo: `<image if="{video_thumb}" not_equals=""
+    source="{video_thumb}" .../>`
+O `<container else ...>` (placeholder) continua funcionando igual —
+`else` ainda amarra no resultado do `if` anterior (`last_if`), só que
+agora o `if` de fato reflete "tem thumbnail ou não".
+
+NÃO precisou de mudança nenhuma no motor (glacier-ui) — é 100% fix de
+uso no lado do app. Ficou pra nota, pro caso de valer documentar melhor
+no AGENTS.md do glacier-ui que `if="{chave}"` sozinho é semântica de
+FLAG booleano, não de "tem valor".
+
+=== HISTÓRICO DA INVESTIGAÇÃO (teorias descartadas, mantidas por registro) ===
+
+Antes de achar a causa raiz acima, várias horas foram gastas numa
+teoria ERRADA (GPU/Vulkan) e depois numa investigação de composição
+(grid/for-each/component/scrollable) que também não era a causa —
+mantido abaixo só como histórico do processo, NÃO como algo a
+retomar.
+
+O que É verdade, confirmado com evidência concreta:
+- Os arquivos baixados são válidos. Comparei um .jpg do cache
+  (~/.local/share/youtube/cache/l37veKnjePU.jpg) BYTE A BYTE com um
+  download direto via curl da mesma URL: idênticos. `file` confirma JPEG
+  baseline válido, 320x180.
+- `ctx.cache_dir` está correto (`/home/antonio/.local/share/youtube/cache`),
+  confirmado via console.log direto.
+- O motor lê os bytes certos do disco: instrumentei
+  `cached_image_handle` em glacier-ui/src/widget.rs com um eprintln logo
+  após `assets.read_bytes(source)` — reportou `ok=true len=17947`,
+  batendo exatamente com o tamanho real do arquivo.
+- GPU desta máquina tem Vulkan incompleto (mensagem real no stderr:
+  "MESA-INTEL: warning: Ivy Bridge Vulkan support is incomplete") — isso
+  é real e já documentado em glacier-ui/docs/TROUBLESHOOTING.md (escrito
+  nesta mesma máquina, para outros sintomas: corrupção visual no resize,
+  paineis de sombra escurecendo, canvas não desenhando).
+
+O que eu ACHEI que resolvia, e não resolveu de verdade:
+- Criei um exemplo mínimo (`examples/imgtest`, já removido) com só
+  `<image source="/caminho/absoluto.jpg">`. Com `WGPU_BACKEND=gl`
+  (via env var), a imagem renderizou PERFEITA — comparei visualmente via
+  screenshot (import -window). Com Vulkan (padrão), não tinha nem
+  testado isolado antes de mudar de teoria (ver abaixo).
+- Implementei em src/main.rs uma função que reexecuta o processo
+  (`std::os::unix::process::CommandExt::exec`) com `WGPU_BACKEND=gl` no
+  ambiente, SE ninguém já tiver decidido por fora. Fundamentei isso
+  porque um `std::env::set_var` direto (sem reexec) NÃO bastava — a
+  variável já aparecia correta num eprintln logo depois de setada, mas a
+  imagem continuava preta. Conclusão precipitada: "faltava reexec".
+- DESCOBRI DEPOIS que o usuário (ou a outra sessão Claude) JÁ TINHA
+  configurado `WGPU_BACKEND=gl` em TRÊS lugares permanentes:
+    ~/.zshrc
+    ~/.config/environment.d/50-wgpu-backend.conf
+    ~/.config/plasma-workspace/env/wgpu-backend.sh
+  Ou seja: a sessão INTEIRA já roda com GL forçado, o tempo todo,
+  independente do meu reexec. `env | grep WGPU_BACKEND` confirma
+  `WGPU_BACKEND=gl` já presente no ambiente ambiente (sem eu setar nada).
+- REPETI o teste do imgtest SEM setar WGPU_BACKEND manualmente (só
+  confiando no ambiente já correto da sessão) — a imagem RENDERIZOU
+  PERFEITA de novo. Então GL via ambiente da sessão FUNCIONA para uma
+  imagem simples e solta.
+- MAS: o app de verdade (youtube), rodando NESSA MESMA sessão (com
+  WGPU_BACKEND=gl já ambiente, confirmado), AINDA mostra thumbnails
+  pretas — testado com screenshot real do usuário, duas vezes, em
+  horários diferentes (8:14pm e 9:41pm), ambas depois do fix.
+
+CONCLUSÃO ATÉ AGORA: o backend gráfico (Vulkan vs GL) NÃO é a causa raiz
+= ou não é a causa ÚNICA. Uma imagem simples e solta renderiza OK com GL
+nesta máquina. A composição usada no app de verdade — `<grid>` +
+`for-each` num `<container>` envolvendo um `<component>` (`VideoCard`)
+que por sua vez tem o `<image>` — é DIFERENTE, e algo nessa composição
+especificamente quebra.
+
+TENTATIVA DE ISOLAR A COMPOSIÇÃO (parcial, inconclusiva):
+Criei um segundo imgtest reproduzindo a estrutura real (grid + for-each +
+container + component local com <image> dentro), com 8 itens apontando
+todos pro mesmo arquivo já confirmado válido. RESULTADO: nem preto, nem
+a imagem — a área da grid ficou COMPLETAMENTE EM BRANCO, nada desenhado,
+nem os containers. Isso pode ser um erro NO MEU teste (posso ter
+esquecido algo — não linkei stylesheet, não dei width/height explícito
+no container-wrapper, o <Card> local pode não estar recebendo a prop
+"thumb" corretamente) e não necessariamente o mesmo bug do app real. NÃO
+CONCLUÍ que é a mesma causa — preciso refazer esse teste com mais
+cuidado, copiando o .gv/.gss REAIS do app (views/app.gv,
+views/styles/app.gss) quase literalmente, só trocando a fonte dos dados
+por uma lista Lua fixa (sem precisar de rede), para eliminar variáveis.
+
+PRÓXIMOS PASSOS SUGERIDOS (nessa ordem):
+1. Refazer o teste de composição isolada copiando views/app.gv e
+   views/styles/app.gss REAIS (só trocando `carregar_populares` por uma
+   lista fixa de 8 itens com o mesmo .jpg já confirmado válido, sem tocar
+   rede nenhuma). Ver se PRETO, BRANCO ou CORRETO. Isso decide se o bug
+   está no <VideoCard>/grid ou seria em outro lugar.
+2. Se ainda preto/branco: remover pedaço por pedaço da composição real
+   (primeiro tira o <container class="cartao_wrap"> for-each, deixa um
+   <VideoCard> solto fora de qualquer grid/for-each; depois testa dentro
+   do <grid> sem for-each, com um <VideoCard> só; depois com for-each) até
+   achar QUAL camada especificamente quebra.
+3. Considerar: será que é o <scrollable>? O app real tem
+   <scrollable height="fill"> envolvendo tudo; meu primeiro imgtest (que
+   funcionou) NÃO tinha scrollable. O segundo (que ficou em branco) tinha
+   <scrollable height="fill">. Essa pode ser a variável real, não o
+   grid/for-each/component. TESTAR: <image> direto dentro de um
+   <scrollable height="fill">, sem nada mais.
+4. Se for o <scrollable>: já existe uma armadilha DOCUMENTADA em
+   AGENTS.md ("fill dentro de scrollable some — o scrollable oferece
+   altura infinita"). Mas isso é sobre LAYOUT medir errado, não sobre
+   pixels não pintarem — pode ser relacionado ou pode ser outra coisa.
+   Vale testar com <column> de altura fixa no lugar do <scrollable> pra
+   confirmar/descartar.
+5. Se nada disso pegar: comparar o backend REALMENTE ativo linha a linha
+   — rodar o app de verdade com `RUST_LOG=wgpu=debug` ou checar se o
+   `iced`/`wgpu` realmente escolheu GL (o log de inicialização do wgpu
+   deveria mencionar isso; não confirmei ainda se aparece nos logs do
+   glacier-ui/iced ou só no stderr do driver).
+
+===========================================================================
+BUG 2 — "Em alta" (e potencialmente qualquer fetch) trava pra sempre
+===========================================================================
+
+STATUS: NÃO RESOLVIDO. Causa raiz aparenta estar fundo no motor
+(glacier-ui/iced/tokio), não na rede, não no app.
+
+CONTEXTO IMPORTANTE (usuário, 2026-09-13): o erro é ESPECÍFICO da tela
+inicial "Em alta" (`carregar_populares`, chart=mostPopular). A BUSCA
+(`carregar_busca`, endpoint `/search`) FUNCIONA BEM — não trava. Os dois
+passam pela MESMA função `chamar()` em api.luau e pelo MESMO cliente
+HTTP (net.rs), então o hang não é genérico a "qualquer fetch" como eu
+supunha antes — é mais estreito do que isso. Diferenças reais entre os
+dois caminhos a considerar nos próximos passos:
+- Endpoint/parâmetros: `/videos?chart=mostPopular&...` vs `/search?q=...`
+  — respostas de tamanho e formato diferentes (busca costuma paginar
+  menos itens por padrão; populares pode vir com mais itens/campos).
+- Timing de disparo: "Em alta" carrega no `init()` da tela (dispara
+  fetch imediatamente ao entrar na home), enquanto busca só dispara
+  depois de o usuário digitar e confirmar — ou seja, "Em alta" é a
+  PRIMEIRA chamada de rede depois que a janela/app acabou de abrir.
+  Isso é uma pista forte: pode ser uma corrida de inicialização (o
+  runtime/executor do iced ainda não está totalmente "pronto" pra
+  agendar a primeira Task quando ela é disparada tão cedo no ciclo de
+  vida — bate com a teoria já registrada abaixo de que a Task nunca é
+  polled). TESTAR: atrasar deliberadamente o fetch de populares (ex.:
+  um pequeno delay/segunda leva de update) e ver se sair do `init()`
+  direto resolve — isso confirmaria/descartaria a teoria de corrida de
+  inicialização em vez de algo do endpoint em si.
+- Cache: com o cache de 10min já implementado, popular fica cacheado
+  também — reconfirmar se o hang acontece mesmo em cache HIT (não
+  deveria, cache hit não faz fetch nenhum) ou só em cache MISS/primeira
+  carga.
+
+O QUE FOI DESCARTADO, com evidência:
+- Rede/DNS: `curl` na MESMA URL, repetidas vezes, sempre 150-340ms.
+  Testado inclusive durante uma janela em que o journal mostrava
+  systemd-resolved "degradando" entre UDP/TCP repetidamente (>100x em 5
+  min) — mesmo assim curl sempre rápido. Rede e DNS não são o problema.
+- Descritores de arquivo: ulimit -n = 1048576, sistema usando ~19 mil de
+  um limite não configurado (efetivamente ilimitado). Descartado
+  (pergunta do usuário, respondida).
+- Cliente HTTP do motor (net.rs) em código isolado: criei um binário Rust
+  standalone (fora do glacier-ui, sem iced) usando o MESMO código de
+  `client()` (hyper + hyper-rustls + HttpConnector com connect_timeout) —
+  respondeu em 151ms, toda vez.
+- Certificate parsing / rustls crypto init: cronometrado isoladamente,
+  ~4-19 MICROSSEGUNDOS. Não é gargalo.
+- Cgroup CPU quota: `cat /sys/fs/cgroup/user.slice/cpu.max` = "max
+  100000" (sem limite). `sched_getaffinity` reporta 4 CPUs. `taskset -c
+  -p <pid>` do processo hung: afinidade 0-3 (todos os cores). Não é
+  limitação de CPU imposta externamente.
+- Feature do tokio: confirmei via `cargo metadata` que o build resolvido
+  TEM `rt-multi-thread` ativa (via unificação de features — o
+  `iced_futures` pede isso mesmo o glacier-ui não pedindo direto). Runtime
+  DEVERIA ser multi-thread.
+
+O QUE FOI TENTADO E NÃO RESOLVEU:
+- Adicionei `connect_timeout(Some(8s))` no HttpConnector em
+  glacier-ui/src/net.rs (publicado como 0.104.2, já em produção). Motivo
+  original: suspeitei de IPv6 quebrado (`timeout 5 bash -c "cat <
+  /dev/tcp/2001:4860:4843:400::/443"` deu timeout de verdade uma vez,
+  provando que ALGUM endereço IPv6 da Google é um buraco negro nesta
+  rede). MAS: mesmo com esse connect_timeout, reproduzi hangs de 30+
+  segundos sem NUNCA disparar timeout nenhum (nem o connect_timeout, nem
+  o timeout de 8-10s configurado no lado Lua via `http(..., {timeout=...})`
+  nem via `fetch(url, {timeout=8000})` direto). Ou seja: o
+  connect_timeout ajuda em teoria mas não é a causa raiz — alguma coisa
+  impede QUALQUER timeout de disparar.
+
+A DESCOBERTA MAIS IMPORTANTE, e a mais estranha:
+- Criei o exemplo MÍNIMO possível (`examples/fetchtest`, já removido):
+  uma tela, um único `fetch()` no init(), nada mais — sem Luau
+  complexo, sem múltiplos `require()`, nada do meu app.
+- REPRODUZIU O MESMO HANG. Confirma que não é bug no meu código nem na
+  complexidade do app youtube — é do PRÓPRIO glacier-ui/iced, neste
+  ambiente.
+- Contei as threads do processo via `ls /proc/<pid>/task | wc -l`
+  enquanto ele estava "hung": **exatamente 1 thread**, do início ao fim
+  da janela observada (5 segundos, chequei a cada 1s). Um runtime tokio
+  multi-thread (`Runtime::new()` = `Builder::new_multi_thread()`) DEVERIA
+  criar várias threads worker IMEDIATAMENTE na construção do Runtime,
+  independente de quando algo é de fato agendado nele. 1 thread só sugere
+  fortemente que ou (a) o Runtime nunca foi construído neste caminho, ou
+  (b) foi construído mas a tarefa nunca chegou a ser agendada nele.
+- Testei (b) diretamente: botei um `eprintln!` na PRIMEIRÍSSIMA linha de
+  `net::perform()` — antes de QUALQUER `.await`. Uma future em Rust é
+  preguiçosa: essa linha só executaria se a future fosse polled pelo
+  menos uma vez. RESULTADO: o eprintln NUNCA IMPRIME. A future retornada
+  por `iced::Task::perform(net::perform(req), ...)` parece nunca ser
+  "polled" nem uma vez.
+- Isso aponta pra algo entre `GlacierUI::dispatch()` (que monta e
+  RETORNA `iced::Task::batch(tasks)`, incluindo a task do fetch — código
+  conferido, está certo) e o `Program::update()` do iced de fato
+  agendar essa Task no executor. NÃO consegui ir mais fundo sem
+  instrumentar o próprio `iced`/`iced_futures` (não são deste
+  repositório — teria que vendorizar/patchear).
+- O comportamento é ADEMAIS inconsistente entre execuções: às vezes o
+  processo morre com exit code 0 (limpo, sem painc) segundos depois de
+  "iniciando" aparecer no log — sugerindo que em algumas execuções
+  `iced::exit()` É chamado (por quê? não sei — botei eprintln no handler
+  de `DaemonMessage::Closed` pra pegar isso no flagra numa próxima
+  rodada e NÃO reproduzi de novo weird enough, dessa vez ficou hung os 30s
+  inteiros sem nenhum Closed). Às vezes hang puro até o timeout do meu
+  próprio script de teste matar. Não é 100% determinístico.
+
+PRÓXIMOS PASSOS SUGERIDOS:
+1. Reconfirmar com um teste limpo e repetido (uns 10x seguidas) se o
+   padrão é: geralmente hang, ocasionalmente "clean exit" logo depois de
+   iniciar — ou se o "clean exit" que vi foi coincidência (ex.: eu
+   mesmo/o ambiente fechando a janela sem querer, via clique acidental —
+   ISSO ACONTECEU várias vezes nesta sessão: alguma coisa neste ambiente
+   clica sozinho em botões/janelas às vezes, nunca descobri o quê. Pode
+   ser um QA/acessibilidade automático do ambiente, ou o próprio usuário
+   mexendo enquanto eu testava).
+2. Instrumentar (temporariamente) `GlacierUI::dispatch` logo ANTES do
+   `iced::Task::batch(tasks)` final, imprimindo `tasks.len()` e
+   confirmando que a task do fetch está de fato ali dentro no momento do
+   retorno.
+3. Se estiver lá: o problema é em como o CALLER (`route()` em
+   daemon.rs, ou o `Program::update()` do iced por cima) trata esse
+   retorno. Seguir a cadeia com mais eprintln em `route()`.
+4. Considerar productionizar um MVP totalmente fora do glacier-ui: um
+   app `iced` puro (sem glacier-ui) com `iced::daemon(...)`, multi-janela,
+   fazendo um `Task::perform(async {...fetch...}, Msg::Done)` dentro de
+   `update()` disparado por uma ação do usuário — se ISSO também travar
+   nesta máquina, o bug é do `iced` 0.14.0 em si (não do glacier-ui), e
+   vale abrir uma issue upstream ou tentar uma versão de desenvolvimento
+   do iced.
+5. Comparar com o exemplo `http_client_luau` que já existe no
+   glacier-ui (bate em jsonplaceholder.typicode.com) — não cheguei a
+   clicar o botão dele (roda em Wayland nativo, não consegui
+   screenshotar/interagir por falta de xdotool). Se alguém conseguir
+   rodar esse exemplo interativamente e ele também travar num host
+   DIFERENTE do googleapis.com, isso descarta de vez qualquer coisa
+   específica do Google/YouTube.
+6. Genuinamente considerar que possa ser pressão de memória do sistema
+   (visto: ~5GB usados de 15GB, ~1.8GB em SWAP no momento dos testes,
+   várias janelas/apps Electron abertas). Rodar o teste mínimo
+   (fetchtest) com o sistema o mais "vazio" possível (fechar outros
+   apps pesados) e ver se o hang para de acontecer — isso apontaria pra
+   contenção de recursos batendo em alguma race no agendamento de tasks
+   do iced, mais do que um bug determinístico de lógica.
+
+===========================================================================
+PENDENTE — suporte a múltiplas abas, com baixo consumo de RAM
+===========================================================================
+
+STATUS: NÃO INICIADO. Requisito do usuário, anotado em 2026-09-13.
+
+REQUISITO: o app precisa suportar várias abas abertas ao mesmo tempo
+(ex.: um vídeo tocando numa aba, navegando/pesquisando em outra), com
+estas prioridades explícitas do usuário, nesta ordem de importância:
+1. Baixo consumo de RAM sempre — não é "aceitável gastar mais RAM por
+   simplicidade", é um requisito duro.
+2. NUNCA alocar memória desnecessariamente — cada aba não usada
+   ativamente não deve segurar recursos (imagens decodificadas, buffers
+   de webview, handles de vídeo, etc.) que uma aba inativa não precisa.
+3. Escolher a MELHOR estratégia pra montar/desmontar a tela de cada aba
+   — ou seja: decidir com cuidado QUANDO uma aba deveria estar totalmente
+   viva (montada, consumindo RAM) vs. suspensa/descartada (desmontada,
+   RAM liberada) vs. talvez um meio-termo (mantém só o estado/dados leves
+   em Lua, descarta a árvore de widgets e os assets pesados tipo
+   webview/imagens até o usuário voltar pra aba).
+
+ANTES DE IMPLEMENTAR NO APP: fazer uma checagem no PRÓPRIO MOTOR
+(glacier-ui) pra garantir que ele dá suporte de verdade ao melhor
+resultado possível aqui — não adiantar montar a solução no app se o
+motor não tiver a peça certa por baixo. Pontos a checar no glacier-ui:
+- Existe hoje algum conceito de "aba"/múltiplas telas simultâneas dentro
+  de UMA janela (não confundir com `open_window` multi-janela, que já
+  existe) — ou isso precisaria ser construído inteiramente no app via
+  `<template if=.../>` trocando qual conteúdo aparece? Nesse caso, cada
+  "aba" escondida ainda ficaria com a árvore de widgets montada
+  (só invisível), o que provavelmente NÃO bate com "baixo consumo de
+  RAM" — precisa confirmar se árvores escondidas por `if=`/`else` são
+  de fato DESALOCADAS (via eval_owned/expand_children reconstruindo do
+  zero a cada frame) ou se ficam retidas em cache (`EvalCache`,
+  mencionado em src/eval.rs — `reuse()`/`store()`) mesmo quando não
+  visíveis. Ler eval.rs com esse foco específico.
+- `cached_image_handle`/`assets` (src/widget.rs) — como funciona o
+  cache de imagens decodificadas? Se for um cache global sem limite ou
+  sem invalidação por "não usado há muito tempo", abas com muitas
+  thumbnails diferentes vão inflar RAM indefinidamente independente de
+  quantas abas estão realmente montadas agora.
+- `src/webview.rs` (usado pra tocar vídeo) — cada `wry::WebView` viva
+  (thread_local WEBVIEWS) provavelmente é a parte mais cara em RAM de
+  tudo isso (processo/engine de renderização web embutido). Uma aba de
+  vídeo que o usuário não está olhando é a candidata número 1 pra ter
+  sua WebView destruída (`destroy()` já existe) e recriada só quando o
+  usuário volta pra aba — precisa decidir o gatilho certo pra isso
+  (aba trocada? timeout de inatividade? nunca, e só destruir ao fechar
+  a aba mesmo?).
+- Confirmar (sem supor) se glacier-ui hoje tem algum jeito nativo de
+  "descarregar"/"pausar" uma tela sem fechar a janela/aba de verdade —
+  se não tiver, decidir se vale construir isso no motor (mais correto,
+  reaproveitável) ou só no app via Lua (mais rápido, mas ad-hoc).
+
+PRÓXIMOS PASSOS SUGERIDOS:
+1. Ler eval.rs/widget.rs com foco em cache de árvore de widgets e cache
+   de imagem, confirmar exatamente o que é retido em memória quando uma
+   tela some de vista (via if=/else, ou por não ser a aba ativa).
+2. Decidir a estratégia de abas (provavelmente: 1 aba ativa = tela
+   totalmente montada; abas inativas = só o estado leve em Lua
+   persistido, tela desmontada, qualquer WebView associada destruída)
+   ANTES de escrever UI pra abas — a estratégia de retenção de estado é
+   a decisão que mais importa aqui, a UI de abas em si é trivial depois.
+3. Se o motor precisar de uma peça nova (ex.: um jeito explícito de
+   "descartar e recriar" uma sub-árvore sob demanda, ou invalidação de
+   cache de imagem por LRU/tamanho máximo), implementar isso no
+   glacier-ui primeiro, do jeito de sempre (bump + commit + publish).
+4. Só depois disso, implementar a UI de abas no app (views/app.gv +
+   app.luau) usando a estratégia decidida.
+
+===========================================================================
+MITIGAÇÃO JÁ APLICADA (não resolve a causa, reduz o impacto)
+===========================================================================
+- views/scripts/cache.luau: cache em memória, TTL 10min, chave =
+  caminho+query ordenada. Ligado em api.luau (função `chamar`), cobre
+  TODOS os endpoints (populares, busca, vídeo, canal, uploads,
+  comentários) de uma vez. Reduz quantas vezes o app precisa esperar por
+  uma chamada de rede nova ao navegar/voltar dentro da janela de 10 min.
+
+===========================================================================
+COMMITS RELEVANTES DESTA SESSÃO
+===========================================================================
+glacier-ui:
+  1c54f41 fix: 0.104.1 — doc da incompatibilidade tray×webview
+  f7828a8 fix: 0.104.2 — connect_timeout no HttpConnector (não resolveu
+          o Bug 2 sozinho, mas é uma correção real e válida por si)
+youtube (este repo):
+  181f397 fix: contorna Vulkan (não resolveu o Bug 1 de verdade, ver
+          acima) + remove tray + glacier-ui 0.104.2
+  1e40627 feat: cache de 10min (mitigação do Bug 2, não a causa raiz)

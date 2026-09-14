@@ -20,6 +20,7 @@
       <column class="cartao">
         <image
           if="{thumb}"
+          not_equals=""
           source="{thumb}"
           width="320"
           height="180"
@@ -156,6 +157,7 @@
             <column class="secao">
               <image
                 if="{video_thumb}"
+                not_equals=""
                 source="{video_thumb}"
                 width="480"
                 height="270"
