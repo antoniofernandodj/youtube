@@ -26,6 +26,7 @@
         "pick_color",
         "pick_font",
         "http",
-        "console"
+        "console",
+        "open_window"
     ]
 }

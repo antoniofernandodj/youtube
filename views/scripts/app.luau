@@ -133,15 +133,12 @@ end
 
 local function carregar_populares(pagina: string?): ()
     if State.home.carregando then
-        console.warn("carregar_populares: já carregando, ignorado")
         return
     end
-    console.log("carregar_populares: chamando Api.populares", pagina)
     State.home.carregando = true
     State.home.erro = ""
     publicar_home()
     local r = Api.populares(pagina)
-    console.log("carregar_populares: resposta ok=", r.ok, "erro=", r.error, "itens=", r.items and #r.items or 0)
     State.home.carregando = false
     if not r.ok then
         State.home.erro = r.error
@@ -149,11 +146,9 @@ local function carregar_populares(pagina: string?): ()
         return
     end
     local novos = {}
-    for i, item in r.items do
-        console.log("carregar_populares: processando item", i, item.id)
+    for _, item in r.items do
         table.insert(novos, video_de_populares(item))
     end
-    console.log("carregar_populares: publicando", #novos, "itens")
     if pagina then
         for _, v in novos do
             table.insert(State.home.itens, v)
@@ -163,7 +158,6 @@ local function carregar_populares(pagina: string?): ()
     end
     State.home.pagina = r.next_page_token
     publicar_home()
-    console.log("carregar_populares: fim")
 end
 
 local function carregar_busca(pagina: string?): ()
@@ -343,7 +337,6 @@ end
 -- ===========================================================================
 
 function init(): ()
-    console.log("init: cache_dir =", ctx.cache_dir, "| tipo =", type(ctx.cache_dir))
     ctx.busca = ""
     ctx.config_chave = Api.chave_atual()
     ctx.config_erro = ""

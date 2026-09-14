@@ -17,21 +17,18 @@ end
 -- arquivo já no disco e nem tocam a rede.
 function Thumbs.caminho(url: string?, chave: string): string?
     if not url or url == "" then
-        console.warn("thumbs: url vazia para", chave)
         return nil
     end
     local caminho = `{ctx.cache_dir}/{chave}.{extensao(url)}`
     local ja_existe = fetch(`file://{caminho}`)
     if ja_existe.ok then
-        console.log("thumbs: já em cache", caminho)
         return caminho
     end
     local res = download_file(url, caminho)
     if not res.ok then
-        console.warn("thumbs: falha ao baixar", url, "->", caminho, "erro:", res.error, "status:", res.status)
+        console.warn("thumbs: falha ao baixar", url, "->", caminho, "erro:", res.error)
         return nil
     end
-    console.log("thumbs: baixado", url, "->", caminho)
     return caminho
 end
 

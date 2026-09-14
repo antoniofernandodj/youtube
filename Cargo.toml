@@ -22,7 +22,11 @@ edition = "2024"
 # ("Attempted to initialize GTK from two different threads") assim que a
 # primeira janela de vídeo abre — reproduzido e confirmado nesta versão
 # (glacier-ui 0.104.0). Ver o comentário em `src/main.rs`.
-glacier-ui = { version = "0.104", features = ["webview"] }
+#
+# 0.104.2 (não menos): corrige um `fetch`/`http()` que podia ficar pendurado
+# pra sempre numa rede com IPv6 quebrado — reproduzido ao vivo contra a API
+# do YouTube nesta mesma máquina (ver CHANGELOG do glacier-ui).
+glacier-ui = { version = "0.104.2", features = ["webview"] }
 
 # O app lê `views/` em runtime (é o que dá o hot-reload), então o .deb leva a
 # pasta junto. O binário instalado é chamado pelo wrapper que o
