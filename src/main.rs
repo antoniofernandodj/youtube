@@ -1,8 +1,12 @@
-use glacier_ui::{GlacierDaemon, window};
+use glacier_ui::GlacierDaemon;
 
-const ICONE: &[u8] = include_bytes!("../assets/icone.png");
-
-// Este app NÃO liga `.tray(...)`, embora o scaffold original tivesse — e de
+// A janela e o aplicativo — ícone, instância única, geometria lembrada e
+// diretório de dados — estão no cabeçalho de `views/app.gv` (`<screen icon>` e
+// `<app id="youtube">`). Sem `.main`, o runner abre esse arquivo sozinho, e o
+// script acha o diretório de dados em `ctx.__data_dir`: o cache de thumbnails
+// mora em `{__data_dir}/cache` (ver views/scripts/thumbs.luau).
+//
+// Este app NÃO declara `<tray>`, embora o scaffold original tivesse — e de
 // propósito. No Linux, `tray` e `webview` competem pelo GTK: a bandeja sobe
 // numa THREAD PRÓPRIA rodando `gtk::init()` + `gtk::main()` (ver
 // glacier-ui/src/tray.rs), e a webview PRECISA rodar na thread principal (é
@@ -17,29 +21,7 @@ const ICONE: &[u8] = include_bytes!("../assets/icone.png");
 // vez de ter a sua própria — hoje ela não faz isso.
 fn main() -> glacier_ui::iced::Result {
     forcar_backend_gl_se_preciso();
-
-    GlacierDaemon::new()
-        .main_window(window::Settings {
-            icon: window::icon::from_file_data(ICONE, None).ok(),
-            ..Default::default()
-        })
-        .remember_window_geometry(true)
-        .storage_dir(diretorio_de_dados())
-        .single_instance("youtube")
-        .main(|motor| {
-            // Onde `Thumbs.caminho` (views/scripts/thumbs.luau) cacheia
-            // thumbnails/avatares baixados da API — semeado ANTES do `init`
-            // do script, então `ctx.cache_dir` já existe quando a tela monta.
-            motor.define_data(
-                "cache_dir",
-                &diretorio_de_dados().join("cache").to_string_lossy(),
-            );
-            if let Err(erro) = motor.register_component("app", "views/app.gv") {
-                eprintln!("{erro}");
-            }
-            motor.set_initial_screen("app");
-        })
-        .run()
+    GlacierDaemon::new().run()
 }
 
 /// Contorna um bug conhecido do driver Vulkan da Mesa em GPUs Intel antigas
@@ -86,14 +68,3 @@ fn forcar_backend_gl_se_preciso() {
 
 #[cfg(not(target_os = "linux"))]
 fn forcar_backend_gl_se_preciso() {}
-
-fn diretorio_de_dados() -> std::path::PathBuf {
-    std::env::var_os("XDG_DATA_HOME")
-        .or_else(|| std::env::var_os("APPDATA"))
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share"))
-        })
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("youtube")
-}

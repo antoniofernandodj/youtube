@@ -1,8 +1,18 @@
-<screen title="YouTube" size="1180 760" min_size="820 560">
+<screen title="YouTube" size="1180 760" min_size="820 560" icon="views/assets/icone.png">
   <resources>
     <link rel="theme"      href="views/styles/theme.json" />
     <link rel="stylesheet" href="views/styles/app.gss" />
     <script src="scripts/app.luau"></script>
+
+    <!--
+      O que é do APLICATIVO, lido pelo runner antes de abrir a janela. O id
+      "youtube" dá nome ao diretório de dados (~/.local/share/youtube), o mesmo
+      de antes: a geometria salva e o cache de thumbnails continuam valendo.
+
+      Sem <tray>, de propósito: no Linux a bandeja e a `webview` disputam o GTK
+      (ver o comentário em src/main.rs).
+    -->
+    <app id="youtube" single_instance="true" remember_geometry="true" />
 
     <!--
       Componente local, só de exibição — sem <script>, sem ação própria.

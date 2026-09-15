@@ -44,7 +44,7 @@ não consome cota nenhuma — é só a webview abrindo uma página normal.
 ## O mapa
 
 ```
-src/main.rs                     runner: janela única, instância única, semeia `cache_dir`
+src/main.rs                     força o backend GL e sobe o runner (a janela e o app estão no app.gv)
 views/
 ├── app.gv                      a tela inteira — troca de "página" por `{view}` (config/home/busca/vídeo/canal)
 ├── scripts/

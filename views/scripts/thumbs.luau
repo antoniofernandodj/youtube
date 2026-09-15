@@ -19,7 +19,7 @@ function Thumbs.caminho(url: string?, chave: string): string?
     if not url or url == "" then
         return nil
     end
-    local caminho = `{ctx.cache_dir}/{chave}.{extensao(url)}`
+    local caminho = `{ctx.__data_dir}/cache/{chave}.{extensao(url)}`
     local ja_existe = fetch(`file://{caminho}`)
     if ja_existe.ok then
         return caminho
