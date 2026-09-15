@@ -51,7 +51,12 @@
   <column class="tela">
     <row class="cabecalho">
       <template if="{view}" not_equals="home">
-        <button  on_click="voltar" class="btn_voltar">←</button>
+        <button
+          on_click="voltar"
+          class="btn_voltar"
+        >
+          ←
+        </button>
       </template>
       <text class="logo">▶ YouTube</text>
       <input
@@ -59,9 +64,20 @@
         placeholder="Pesquisar"
         class="campo_busca"
       />
-      <button class="btn_buscar" on_click="pesquisar">Buscar</button>
+      <button
+        class="btn_buscar"
+        on_click="pesquisar"
+      >
+        Buscar
+      </button>
       <space />
-      <button on_click="ir_config" class="btn_config" tooltip="Configurações">⚙</button>
+      <button
+        on_click="ir_config"
+        class="btn_config"
+        tooltip="Configurações"
+      >
+        ⚙
+      </button>
     </row>
 
     <scrollable height="fill">
@@ -83,8 +99,15 @@
               placeholder="Cole sua chave de API aqui"
               class="campo_chave"
             />
-            <text if="{config_erro}" class="erro">{config_erro}</text>
-            <button on_click="salvar_chave" class="btn_primario">Salvar</button>
+            <text if="{config_erro}" class="erro">
+              {config_erro}
+            </text>
+            <button
+              on_click="salvar_chave"
+              class="btn_primario"
+            >
+              Salvar
+            </button>
           </column>
         </template>
 
@@ -113,10 +136,11 @@
             </grid>
             <button
               if="{home_tem_mais}"
-              text="Carregar mais"
               on_click="carregar_mais_home"
               class="btn_mais"
-            />
+            >
+              Carregar mais
+            </button>
             <text if="{home_carregando}" class="carregando">
               Carregando…
             </text>
@@ -126,9 +150,15 @@
         <!-- ═══ Busca ═══ -->
         <template if="{view}" equals="busca">
           <column class="secao">
-            <text class="titulo_secao">Resultados para "{busca_termo}"</text>
-            <text if="{busca_erro}" class="erro">{busca_erro}</text>
-            <text if="{busca_itens}" empty class="vazio">Nada encontrado.</text>
+            <text class="titulo_secao">
+              Resultados para "{busca_termo}"
+            </text>
+            <text if="{busca_erro}" class="erro">
+              {busca_erro}
+            </text>
+            <text if="{busca_itens}" empty class="vazio">
+              Nada encontrado.
+            </text>
             <grid columns="4" spacing="16" row_spacing="16">
               <container
                 for-each="busca_itens"
@@ -145,7 +175,10 @@
               </container>
             </grid>
             <template if="{busca_tem_mais}">
-              <button on_click="carregar_mais_busca" class="btn_mais">
+              <button
+                on_click="carregar_mais_busca"
+                class="btn_mais"
+              >
                 Carregar mais
               </button>
             </template>
@@ -179,7 +212,12 @@
                   {video_canal}
                 </text>
                 <space />
-                <button on_click="assistir" class="btn_primario">▶ Assistir no YouTube</button>
+                <button
+                  on_click="assistir"
+                  class="btn_primario"
+                >
+                  ▶ Assistir no YouTube
+                </button>
               </row>
               <text class="video_meta">{video_meta}</text>
               <text class="video_descricao">{video_descricao}</text>
@@ -195,10 +233,11 @@
               </row>
               <template if="{comentarios_tem_mais}">
                 <button
-                  text="Carregar mais comentários"
                   on_click="carregar_mais_comentarios"
                   class="btn_mais"
-                />
+                >
+                  Carregar mais comentários
+                </button>
               </template>
               <text if="{comentarios_carregando}" class="carregando">
                 Carregando comentários…
@@ -244,7 +283,12 @@
                 </container>
               </grid>
               <template if="{canal_tem_mais}">
-                <button on_click="carregar_mais_canal" class="btn_mais">Carregar mais</button>
+                <button
+                  on_click="carregar_mais_canal"
+                  class="btn_mais"
+                >
+                  Carregar mais
+                </button>
               </template>
             </column>
           </template>
@@ -254,3 +298,4 @@
     </scrollable>
   </column>
 </screen>
+

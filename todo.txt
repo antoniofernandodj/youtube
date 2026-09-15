@@ -393,6 +393,50 @@ PRÓXIMOS PASSOS SUGERIDOS:
    app.luau) usando a estratégia decidida.
 
 ===========================================================================
+PENDENTE — exibir imagens direto da RAM (não só as que estão em disco)
+===========================================================================
+
+STATUS: NÃO INICIADO. Requisito do usuário, anotado em 2026-09-14.
+
+REQUISITO: os elementos de UI que hoje exibem imagem (`<image source=...>`,
+usado em VideoCard/avatares/thumbnails etc.) só sabem exibir imagem a
+partir de um caminho em disco (ex.: arquivo já baixado em
+`~/.local/share/youtube/cache/`). Precisam também ser capazes de exibir
+uma imagem que existe só em memória (bytes já em RAM, sem ter passado por
+disco) — por exemplo bytes recém-baixados antes de serem gravados no
+cache, ou gerados/decodificados em memória.
+
+IDEIA LEVANTADA PELO USUÁRIO: usar codificação base64 (ex.:
+`source="data:image/jpeg;base64,{dados_base64}"` ou equivalente) como
+possível caminho pra passar bytes de imagem direto via string, sem
+depender de um caminho de arquivo.
+
+A CHECAR (antes de implementar no app):
+- Se `<image source=...>` no glacier-ui hoje só aceita caminho de
+  arquivo/URL, ou se já existe suporte a data URI (`data:`) —
+  ler `cached_image_handle`/`assets` em glacier-ui/src/widget.rs pra
+  confirmar o que `source` aceita hoje e onde seria o ponto de extensão.
+- Custo de base64 em string Lua pra imagens grandes (overhead de ~33% de
+  tamanho + tempo de encode/decode) — avaliar se vale a pena versus outro
+  mecanismo (ex.: motor aceitar bytes crus/handle de memória diretamente,
+  sem passar por string/base64).
+- Ver se isso se conecta com o item de "múltiplas abas com baixo consumo
+  de RAM" logo abaixo — cache de imagem decodificada em memória é um
+  tema relacionado.
+
+PRÓXIMOS PASSOS SUGERIDOS:
+1. Ler glacier-ui/src/widget.rs (`cached_image_handle`/`assets`) pra
+   entender exatamente como `source=` é resolvido hoje (arquivo vs URL vs
+   outros esquemas) e se dá pra estender pra aceitar bytes em memória
+   (via data URI base64 ou outro mecanismo nativo).
+2. Decidir a abordagem (data URI base64 é o caminho mais simples de
+   implementar no lado do app sem mudar o motor; um esquema de "handle de
+   memória" seria mais eficiente mas provavelmente exige mudança no
+   glacier-ui).
+3. Implementar e testar com um caso real (ex.: exibir uma thumbnail antes
+   dela ser persistida em disco, direto dos bytes baixados).
+
+===========================================================================
 MITIGAÇÃO JÁ APLICADA (não resolve a causa, reduz o impacto)
 ===========================================================================
 - views/scripts/cache.luau: cache em memória, TTL 10min, chave =
